@@ -66,7 +66,7 @@ internal sealed class RowView
         };
         _zoneBox.QuerySubmitted += (box, e) =>
         {
-            var chosen = e.ChosenSuggestion as ZoneOption ?? catalog.Filter(e.QueryText).FirstOrDefault();
+            var chosen = e.ChosenSuggestion as ZoneOption ?? catalog.Match(e.QueryText);
             if (chosen is not null)
                 state.SetZone(index, chosen);
             box.Text = state.Rows[index].Zone.DisplayName;

@@ -67,6 +67,7 @@ public class CalculatorStateTests
         Assert.True(s.Rows[1].IsStale);
         Assert.Equal("2026-09-24 14:32:05", s.Rows[1].Text);
         Assert.False(s.Rows[0].CanCopy);
+        Assert.False(s.Rows[1].CanCopy);   // 灰色的舊值不能被當成目前結果複製
     }
 
     [Fact]

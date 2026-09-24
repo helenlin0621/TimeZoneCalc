@@ -219,7 +219,7 @@ public sealed class CalculatorState
         row.Text = TimeFormat.Wall(zoned.Wall);
         row.OffsetLabel = zoned.Offset.Label;
         row.IsStale = stale;
-        row.CanCopy = true;
+        row.CanCopy = !stale;
     }
 
     private void OnChanged() => Changed?.Invoke(this, EventArgs.Empty);

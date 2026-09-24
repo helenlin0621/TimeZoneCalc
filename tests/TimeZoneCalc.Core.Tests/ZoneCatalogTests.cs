@@ -65,6 +65,28 @@ public class ZoneCatalogTests
     public void Filter_finds_taipei_case_insensitive(string query) =>
         Assert.Contains(Catalog.Taipei, Catalog.Filter(query));
 
+    [Theory]
+    [InlineData("new york", "Eastern Standard Time")]
+    [InlineData("紐約", "Eastern Standard Time")]
+    [InlineData("los angeles", "Pacific Standard Time")]
+    [InlineData("tokyo", "Tokyo Standard Time")]
+    [InlineData("東京", "Tokyo Standard Time")]
+    [InlineData("london", "GMT Standard Time")]
+    [InlineData("berlin", "W. Europe Standard Time")]
+    public void Filter_finds_common_cities_by_alias(string query, string zoneId) =>
+        Assert.Contains(Catalog.Filter(query), z => z.Id == zoneId);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("zzz-no-such-zone")]
+    public void Match_blank_or_unknown_query_is_null(string query) =>
+        Assert.Null(Catalog.Match(query));
+
+    [Fact]
+    public void Match_returns_first_filtered_zone() =>
+        Assert.Same(Catalog.Taipei, Catalog.Match("tai"));
+
     [Fact]
     public void Filter_blank_returns_all() =>
         Assert.Equal(Catalog.All.Count, Catalog.Filter("  ").Count);
