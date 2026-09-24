@@ -21,8 +21,10 @@ internal sealed class RowView
     private readonly TextBox _search = new() { PlaceholderText = "搜尋時區，例如 tai、紐約、+07:00" };
     private readonly ListView _list = new() { Height = 320, IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.None };
     private readonly RichTextBlock _value = new() { FontSize = 30, FontWeight = FontWeights.SemiBold, FontFamily = new FontFamily("Cascadia Mono, Consolas") };
-    private readonly Run _date = new();
-    private readonly Run _time = new();
+    // 年月日時分秒各一個 Run，中間夾分隔符號
+    private readonly Run[] _fields = [new(), new(), new(), new(), new(), new()];
+    private readonly Run[] _separators = [new(), new(), new(), new(), new()];
+    private static readonly string[] SeparatorText = ["-", "-", " ", ":", ":"];
     private readonly TextBlock _offset = new() { FontSize = 12 };
     private readonly TextBlock _note = new() { FontSize = 12, Visibility = Visibility.Collapsed };
     private ZoneOption? _zone;
@@ -80,18 +82,20 @@ internal sealed class RowView
             _flyout.Hide();
         }
 
-        // 日期時間：點日期或時間就在這一列輸入；拖曳可框選後 Ctrl+C 複製
+        // 日期時間：點年月日時分秒任一欄就在這一列輸入那一欄；拖曳可框選後 Ctrl+C 複製
         var paragraph = new Paragraph();
-        paragraph.Inlines.Add(_date);
-        paragraph.Inlines.Add(new Run { Text = " " });
-        paragraph.Inlines.Add(_time);
+        for (var i = 0; i < _fields.Length; i++)
+        {
+            paragraph.Inlines.Add(_fields[i]);
+            if (i < _separators.Length)
+                paragraph.Inlines.Add(_separators[i]);
+        }
         _value.Blocks.Add(paragraph);
         _value.Tapped += (_, e) =>
         {
             var pos = _value.GetPositionFromPoint(e.GetPosition(_value));
-            var segment = pos is not null && pos.Offset < _time.ContentStart.Offset ? EntryMode.Date : EntryMode.Time;
             state.SetActiveRow(index);
-            state.SetSegment(segment);
+            state.SelectField(pos is null ? Field.Hour : FieldAt(pos.Offset));
             e.Handled = true;
         };
 
@@ -122,7 +126,17 @@ internal sealed class RowView
 
     public Grid Root { get; }
 
-    public void Update(ZoneRow row, bool isActive, EntryMode segment, bool dateInvalid)
+    // 點在某欄或它後面的分隔符號上，都算那一欄
+    private Field FieldAt(int offset)
+    {
+        var field = Field.Year;
+        for (var i = 1; i < _fields.Length; i++)
+            if (offset >= _fields[i].ContentStart.Offset)
+                field = (Field)i;
+        return field;
+    }
+
+    public void Update(ZoneRow row, bool isActive, Field activeField)
     {
         if (!ReferenceEquals(_zone, row.Zone))
         {
@@ -132,18 +146,23 @@ internal sealed class RowView
         }
         _bar.Background = isActive ? Theme.Get("AccentFillColorDefaultBrush") : Theme.Transparent;
 
-        var parts = row.Text.Split(' ', 2);
-        _date.Text = parts[0];
-        _time.Text = parts.Length > 1 ? parts[1] : "";
+        // Text 是固定格式 "yyyy-MM-dd HH:mm:ss"（輸入中可能含 "_"）；不存在的時間是 "—"
+        var blank = row.Text == CalculatorState.Blank;
+        int[] starts = [0, 5, 8, 11, 14, 17];
+        for (var i = 0; i < _fields.Length; i++)
+            _fields[i].Text = blank ? (i == 0 ? row.Text : "") : row.Text.Substring(starts[i], i == 0 ? 4 : 2);
+        for (var i = 0; i < _separators.Length; i++)
+            _separators[i].Text = blank ? "" : SeparatorText[i];
 
         var normal = Theme.Get(row.IsStale ? "TextFillColorDisabledBrush" : "TextFillColorPrimaryBrush");
         var accent = Theme.Get("AccentTextFillColorPrimaryBrush");
         _value.Foreground = normal;
-        _date.Foreground = isActive && dateInvalid ? Theme.Get("SystemFillColorCriticalBrush")
-            : isActive && segment == EntryMode.Date ? accent : normal;
-        _time.Foreground = isActive && segment == EntryMode.Time ? accent : normal;
-        _date.TextDecorations = isActive && segment == EntryMode.Date ? TextDecorations.Underline : TextDecorations.None;
-        _time.TextDecorations = isActive && segment == EntryMode.Time ? TextDecorations.Underline : TextDecorations.None;
+        for (var i = 0; i < _fields.Length; i++)
+        {
+            var current = isActive && (Field)i == activeField;
+            _fields[i].Foreground = current ? accent : normal;
+            _fields[i].TextDecorations = current ? TextDecorations.Underline : TextDecorations.None;
+        }
 
         _offset.Text = row.OffsetLabel;
         _offset.Foreground = Theme.Get("TextFillColorSecondaryBrush");

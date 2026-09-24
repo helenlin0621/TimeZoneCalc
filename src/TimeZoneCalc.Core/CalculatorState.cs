@@ -1,6 +1,6 @@
 namespace TimeZoneCalc.Core;
 
-public enum InputStatus { Ok, IncompleteDate, InvalidDate, NonexistentTime, AmbiguousTime }
+public enum InputStatus { Ok, IncompleteDate, NonexistentTime, AmbiguousTime }
 
 public sealed class ZoneRow
 {
@@ -38,46 +38,50 @@ public sealed class CalculatorState
     public IReadOnlyList<ZoneRow> Rows => _rows;
     public int ActiveIndex { get; private set; }
     public ZoneRow ActiveRow => _rows[ActiveIndex];
-    public EntryMode ActiveSegment { get; private set; } = EntryMode.Time;
-    public DigitEntry DateEntry { get; } = new(EntryMode.Date);
-    public DigitEntry TimeEntry { get; } = new(EntryMode.Time);
+    public DateTimeEntry Entry { get; } = new();
+    public Field ActiveField => Entry.Active;
     public AmbiguityChoice Ambiguity { get; private set; }
     public InputStatus Status { get; private set; }
 
-    private DigitEntry ActiveEntry => ActiveSegment == EntryMode.Date ? DateEntry : TimeEntry;
-
     public void PushDigit(int digit)
     {
-        if (ActiveEntry.TryPush(digit))
+        if (Entry.PushDigit(digit))
             OnInputEdited();
     }
 
     public void Backspace()
     {
-        if (ActiveEntry.Backspace())
+        if (Entry.Backspace())
             OnInputEdited();
     }
 
+    // 清空目前這一欄
     public void Clear()
     {
-        if (ActiveSegment == EntryMode.Time)
-            TimeEntry.Clear();
-        else
-            DateEntry.Load(DateOnly.FromDateTime(Converter.ToZone(_clock(), ActiveRow.Zone).Wall));
+        Entry.Clear();
         OnInputEdited();
     }
 
     public void SetNow() => LoadInstant(_clock());
 
-    public void SetSegment(EntryMode segment)
+    // 離開欄位時未打滿的年會還原，所以要重算
+    public void SelectField(Field field)
     {
-        ActiveSegment = segment;
-        ActiveEntry.MarkFresh();
-        OnChanged();
+        Entry.Select(field);
+        Recompute();
     }
 
-    public void ToggleSegment() =>
-        SetSegment(ActiveSegment == EntryMode.Time ? EntryMode.Date : EntryMode.Time);
+    public void NextField()
+    {
+        if (Entry.Next())
+            Recompute();
+    }
+
+    public void PreviousField()
+    {
+        if (Entry.Previous())
+            Recompute();
+    }
 
     public void SetActiveRow(int index)
     {
@@ -117,8 +121,7 @@ public sealed class CalculatorState
     private void LoadInstant(DateTimeOffset instant)
     {
         var zoned = Converter.ToZone(instant, ActiveRow.Zone);
-        DateEntry.Load(DateOnly.FromDateTime(zoned.Wall));
-        TimeEntry.Load(TimeOnly.FromDateTime(zoned.Wall));
+        Entry.Load(zoned.Wall);
         Ambiguity = Converter.ChoiceFor(instant, ActiveRow.Zone);
         Recompute();
     }
@@ -131,12 +134,11 @@ public sealed class CalculatorState
 
     private void Recompute()
     {
-        var date = DateEntry.Date;
-        if (date is null)
+        if (Entry.Wall is not { } wall)
         {
-            Status = DateEntry.Digits.Length < DateEntry.MaxDigits ? InputStatus.IncompleteDate : InputStatus.InvalidDate;
+            Status = InputStatus.IncompleteDate;
             ShowLastInstantAsStale();
-            ActiveRow.Text = $"{DateEntry.Display} {TimeEntry.Display}";
+            ActiveRow.Text = Entry.Display;
             ActiveRow.OffsetLabel = "";
             ActiveRow.IsStale = false;
             ActiveRow.CanCopy = false;
@@ -144,7 +146,6 @@ public sealed class CalculatorState
             return;
         }
 
-        var wall = date.Value.ToDateTime(TimeEntry.Time);
         var result = Converter.Resolve(ActiveRow.Zone, wall, Ambiguity);
         if (result.Kind == ResolveKind.Invalid)
         {
@@ -156,7 +157,7 @@ public sealed class CalculatorState
                 row.IsStale = false;
                 row.CanCopy = false;
             }
-            ActiveRow.Text = TimeFormat.Wall(wall);
+            ActiveRow.Text = Entry.Display;
             OnChanged();
             return;
         }
@@ -165,6 +166,9 @@ public sealed class CalculatorState
         _lastInstant = result.Instant;
         foreach (var row in _rows)
             Show(row, result.Instant, stale: false);
+        // 輸入列顯示正在打的內容（例如 "4_"）；還沒打完的欄位不能複製
+        ActiveRow.Text = Entry.Display;
+        ActiveRow.CanCopy = !Entry.Display.Contains('_');
         OnChanged();
     }
 

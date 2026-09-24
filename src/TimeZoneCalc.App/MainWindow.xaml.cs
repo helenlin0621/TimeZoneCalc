@@ -59,9 +59,8 @@ public sealed partial class MainWindow : Window
 
     private void Render()
     {
-        var dateInvalid = _state.Status == InputStatus.InvalidDate;
         for (var i = 0; i < _rowViews.Count; i++)
-            _rowViews[i].Update(_state.Rows[i], i == _state.ActiveIndex, _state.ActiveSegment, dateInvalid);
+            _rowViews[i].Update(_state.Rows[i], i == _state.ActiveIndex, _state.ActiveField);
         RenderStatus();
     }
 
@@ -70,9 +69,6 @@ public sealed partial class MainWindow : Window
         AmbiguityButton.Visibility = Visibility.Collapsed;
         switch (_state.Status)
         {
-            case InputStatus.InvalidDate:
-                ShowStatus(InfoBarSeverity.Error, $"日期不存在或超出範圍（{DigitEntry.MinYear}–{DigitEntry.MaxYear}）");
-                break;
             case InputStatus.NonexistentTime:
                 ShowStatus(InfoBarSeverity.Warning, "此時間因夏令時間切換而不存在");
                 break;
@@ -128,6 +124,8 @@ public sealed partial class MainWindow : Window
 
         var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control)
             .HasFlag(CoreVirtualKeyStates.Down);
+        var shift = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift)
+            .HasFlag(CoreVirtualKeyStates.Down);
         e.Handled = true;
         switch (e.Key)
         {
@@ -143,8 +141,13 @@ public sealed partial class MainWindow : Window
             case VirtualKey.Escape:
                 _state.Clear();
                 break;
+            case VirtualKey.Tab when shift:
+            case VirtualKey.Left:
+                _state.PreviousField();
+                break;
             case VirtualKey.Tab:
-                _state.ToggleSegment();
+            case VirtualKey.Right:
+                _state.NextField();
                 break;
             case VirtualKey.Up:
                 _state.MoveActive(-1);

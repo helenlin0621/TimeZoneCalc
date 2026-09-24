@@ -17,21 +17,20 @@ public class CalculatorStateTests
             s.PushDigit(c - '0');
     }
 
-    private static void Enter(CalculatorState s, string date, string time)
+    // 從年開始連續打 14 位：yyyyMMddHHmmss
+    private static void Enter(CalculatorState s, string yyyyMMddHHmmss)
     {
-        s.SetSegment(EntryMode.Date);
-        Type(s, date);
-        s.SetSegment(EntryMode.Time);
-        Type(s, time);
+        s.SelectField(Field.Year);
+        Type(s, yyyyMMddHHmmss);
     }
 
     [Fact]
-    public void Starts_with_utc_and_taipei_at_now_with_utc_active()
+    public void Starts_with_utc_and_taipei_at_now_with_utc_hour_active()
     {
         var s = Create();
         Assert.Equal(new[] { Catalog.Utc, Catalog.Taipei }, s.Rows.Select(r => r.Zone));
         Assert.Equal(0, s.ActiveIndex);
-        Assert.Equal(EntryMode.Time, s.ActiveSegment);
+        Assert.Equal(Field.Hour, s.ActiveField);
         Assert.Equal(InputStatus.Ok, s.Status);
         Assert.Equal("2026-09-24 06:32:05", s.Rows[0].Text);
         Assert.Equal("2026-09-24 14:32:05", s.Rows[1].Text);
@@ -40,30 +39,62 @@ public class CalculatorStateTests
     }
 
     [Fact]
-    public void Typing_time_restarts_and_converts_across_day()
+    public void Typing_hour_and_minute_converts_across_day()
     {
         var s = Create();
         Type(s, "2300");
-        Assert.Equal("23:00:00", s.TimeEntry.Display);
-        Assert.Equal("2026-09-25 07:00:00", s.Rows[1].Text);
+        Assert.Equal("2026-09-24 23:00:05", s.Rows[0].Text);
+        Assert.Equal("2026-09-25 07:00:05", s.Rows[1].Text);
+        Assert.Equal(Field.Second, s.ActiveField);
     }
 
     [Fact]
-    public void Typing_date_changes_date_and_keeps_time()
+    public void Typing_full_datetime_from_year()
     {
         var s = Create();
-        s.SetSegment(EntryMode.Date);
-        Type(s, "20261231");
-        Assert.Equal("2026-12-31 14:32:05", s.Rows[1].Text);
+        Enter(s, "20261231143205");
+        Assert.Equal("2026-12-31 22:32:05", s.Rows[1].Text);
     }
 
     [Fact]
-    public void Incomplete_date_marks_other_rows_stale_with_last_value()
+    public void Clicking_a_field_then_typing_edits_only_that_field()
     {
         var s = Create();
-        s.SetSegment(EntryMode.Date);
-        Type(s, "2026");
+        s.SelectField(Field.Month);
+        Type(s, "12");
+        Assert.Equal("2026-12-24 06:32:05", s.Rows[0].Text);
+        Assert.Equal(Field.Day, s.ActiveField);
+    }
+
+    [Theory]
+    [InlineData(Field.Hour, "30", "2026-09-24 23:32:05")]
+    [InlineData(Field.Minute, "75", "2026-09-24 06:59:05")]
+    [InlineData(Field.Month, "15", "2026-12-24 06:32:05")]
+    public void Values_above_max_are_clamped(Field field, string digits, string expected)
+    {
+        var s = Create();
+        s.SelectField(field);
+        Type(s, digits);
+        Assert.Equal(expected, s.Rows[0].Text);
+    }
+
+    [Fact]
+    public void Day_clamps_to_month_length()
+    {
+        var s = Create();
+        Enter(s, "20260231");
+        Assert.Equal("2026-02-28 06:32:05", s.Rows[0].Text);
+        Assert.Equal(InputStatus.Ok, s.Status);
+    }
+
+    [Fact]
+    public void Incomplete_year_marks_other_rows_stale_with_last_value()
+    {
+        var s = Create();
+        s.SelectField(Field.Year);
+        Type(s, "202");
         Assert.Equal(InputStatus.IncompleteDate, s.Status);
+        Assert.Equal("202_-09-24 06:32:05", s.Rows[0].Text);
         Assert.True(s.Rows[1].IsStale);
         Assert.Equal("2026-09-24 14:32:05", s.Rows[1].Text);
         Assert.False(s.Rows[0].CanCopy);
@@ -71,37 +102,48 @@ public class CalculatorStateTests
     }
 
     [Fact]
-    public void Impossible_date_is_invalid()
+    public void Partial_field_shows_underscore_and_is_not_copyable()
     {
         var s = Create();
-        s.SetSegment(EntryMode.Date);
-        Type(s, "20260231");
-        Assert.Equal(InputStatus.InvalidDate, s.Status);
-        Assert.True(s.Rows[1].IsStale);
+        s.SelectField(Field.Minute);
+        Type(s, "4");
+        Assert.Equal("2026-09-24 06:4_:05", s.Rows[0].Text);
+        Assert.False(s.Rows[0].CanCopy);
+        Assert.Equal("2026-09-24 14:04:05", s.Rows[1].Text);
     }
 
     [Fact]
-    public void Selecting_row_loads_its_value()
+    public void Next_and_previous_field()
+    {
+        var s = Create();
+        s.NextField();
+        Assert.Equal(Field.Minute, s.ActiveField);
+        s.PreviousField();
+        s.PreviousField();
+        Assert.Equal(Field.Day, s.ActiveField);
+    }
+
+    [Fact]
+    public void Selecting_row_loads_its_value_and_keeps_field()
     {
         var s = Create();
         s.SetActiveRow(1);
         Assert.Equal(1, s.ActiveIndex);
-        Assert.Equal("2026-09-24", s.DateEntry.Display);
-        Assert.Equal("14:32:05", s.TimeEntry.Display);
-        Assert.Equal("2026-09-24 06:32:05", s.Rows[0].Text);
+        Assert.Equal("2026-09-24 14:32:05", s.Entry.Display);
+        Assert.Equal(Field.Hour, s.ActiveField);
         Type(s, "08");
-        Assert.Equal("2026-09-24 00:00:00", s.Rows[0].Text);
+        Assert.Equal("2026-09-24 00:32:05", s.Rows[0].Text);
     }
 
     [Fact] // Review Focus 4
-    public void Selecting_row_while_date_incomplete_loads_last_valid_instant()
+    public void Selecting_row_while_year_incomplete_loads_last_valid_instant()
     {
         var s = Create();
-        s.SetSegment(EntryMode.Date);
-        Type(s, "2026");
+        s.SelectField(Field.Year);
+        Type(s, "202");
         s.SetActiveRow(1);
         Assert.Equal(InputStatus.Ok, s.Status);
-        Assert.Equal("14:32:05", s.TimeEntry.Display);
+        Assert.Equal("2026-09-24 14:32:05", s.Entry.Display);
         Assert.Equal("2026-09-24 06:32:05", s.Rows[0].Text);
     }
 
@@ -118,26 +160,21 @@ public class CalculatorStateTests
     }
 
     [Fact]
-    public void Clear_time_sets_midnight_and_clear_date_sets_today()
+    public void Clear_empties_active_field()
     {
         var s = Create();
         s.Clear();
-        Assert.Equal("00:00:00", s.TimeEntry.Display);
-        Assert.Equal("2026-09-24 08:00:00", s.Rows[1].Text);
-        s.SetSegment(EntryMode.Date);
-        Type(s, "20200101");
-        s.Clear();
-        Assert.Equal("2026-09-24", s.DateEntry.Display);
+        Assert.Equal("2026-09-24 __:32:05", s.Rows[0].Text);
+        Assert.Equal("2026-09-24 08:32:05", s.Rows[1].Text);
     }
 
     [Fact]
     public void SetNow_restores_clock_time()
     {
         var s = Create();
-        Type(s, "1200");
+        Type(s, "12");
         s.SetNow();
-        Assert.Equal("06:32:05", s.TimeEntry.Display);
-        Assert.Equal("2026-09-24", s.DateEntry.Display);
+        Assert.Equal("2026-09-24 06:32:05", s.Entry.Display);
     }
 
     [Fact]
@@ -145,10 +182,10 @@ public class CalculatorStateTests
     {
         // 使用者的例子：UTC 00:00 ↔ 台北 08:00；把台北改成 16:00，UTC 變 08:00
         var s = Create();
-        Enter(s, "20260924", "000000");
+        Enter(s, "20260924000000");
         Assert.Equal("2026-09-24 08:00:00", s.Rows[1].Text);
         s.SetActiveRow(1);
-        s.SetSegment(EntryMode.Time);
+        s.SelectField(Field.Hour);
         Type(s, "160000");
         Assert.Equal("2026-09-24 08:00:00", s.Rows[0].Text);
         Assert.Equal(2, s.Rows.Count);
@@ -168,7 +205,7 @@ public class CalculatorStateTests
     {
         var s = Create();
         s.SetZone(0, Catalog.Taipei);
-        Assert.Equal("06:32:05", s.TimeEntry.Display);
+        Assert.Equal("2026-09-24 06:32:05", s.Rows[0].Text);
         Assert.Equal("2026-09-24 06:32:05", s.Rows[1].Text);
     }
 
@@ -177,7 +214,7 @@ public class CalculatorStateTests
     {
         var s = Create();
         s.SetZone(0, NewYork);
-        Enter(s, "20260308", "023000");
+        Enter(s, "20260308023000");
         Assert.Equal(InputStatus.NonexistentTime, s.Status);
         Assert.Equal(CalculatorState.Blank, s.Rows[1].Text);
         Assert.False(s.Rows[1].CanCopy);
@@ -189,7 +226,7 @@ public class CalculatorStateTests
     {
         var s = Create();
         s.SetZone(0, NewYork);
-        Enter(s, "20261101", "013000");
+        Enter(s, "20261101013000");
         Assert.Equal(InputStatus.AmbiguousTime, s.Status);
         Assert.Equal(AmbiguityChoice.First, s.Ambiguity);
         Assert.Equal("2026-11-01 13:30:00", s.Rows[1].Text);
@@ -208,7 +245,7 @@ public class CalculatorStateTests
     public void Selecting_row_showing_second_occurrence_keeps_instant()
     {
         var s = Create();
-        Enter(s, "20261101", "063000");
+        Enter(s, "20261101063000");
         s.SetZone(1, NewYork);
         Assert.Equal("2026-11-01 01:30:00", s.Rows[1].Text);
         Assert.Equal("UTC-05:00", s.Rows[1].OffsetLabel);
@@ -220,15 +257,15 @@ public class CalculatorStateTests
     }
 
     [Fact] // Review Focus 3
-    public void Selecting_row_whose_date_is_past_2100_reports_invalid_date()
+    public void Selecting_row_whose_date_is_past_2100_keeps_the_value()
     {
         var s = Create();
-        Enter(s, "21001231", "230000");
+        Enter(s, "21001231230000");
         Assert.Equal("2101-01-01 07:00:00", s.Rows[1].Text);
 
         s.SetActiveRow(1);
-        Assert.Equal(InputStatus.InvalidDate, s.Status);
-        Assert.Equal("2101-01-01", s.DateEntry.Display);
+        Assert.Equal(InputStatus.Ok, s.Status);
+        Assert.Equal("2101-01-01 07:00:00", s.Entry.Display);
         Assert.Equal("2100-12-31 23:00:00", s.Rows[0].Text);
     }
 
@@ -238,7 +275,7 @@ public class CalculatorStateTests
         var s = Create();
         var count = 0;
         s.Changed += (_, _) => count++;
-        s.PushDigit(9);   // 小時十位數不能是 9
+        s.PushDigit(10);
         Assert.Equal(0, count);
         s.PushDigit(1);
         Assert.Equal(1, count);
