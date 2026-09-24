@@ -7,7 +7,7 @@
 
     <!-- Host 是可取得焦點的外框，讓鍵盤輸入不需要先點任何欄位 -->
     <UserControl x:Name="Host" IsTabStop="True" UseSystemFocusVisuals="False" PreviewKeyDown="Host_PreviewKeyDown">
-        <Grid x:Name="Root" Padding="12" RowSpacing="8">
+        <Grid x:Name="Root" Padding="16" RowSpacing="12">
             <Grid.Resources>
                 <Style x:Key="KeyButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                     <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -18,48 +18,21 @@
             </Grid.Resources>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="*" MinHeight="240" />
+                <RowDefinition Height="1.2*" MaxHeight="340" />
             </Grid.RowDefinitions>
 
-            <!-- 大字區：📅 日期段 時間段 -->
-            <Grid Grid.Row="0" ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button x:Name="CalendarButton" VerticalAlignment="Center" AllowFocusOnInteraction="False" ToolTipService.ToolTip="選擇日期">
-                    <FontIcon Glyph="&#xE787;" />
-                    <Button.Flyout>
-                        <Flyout x:Name="CalendarFlyout" Opening="CalendarFlyout_Opening">
-                            <CalendarView x:Name="DatePickerCalendar" SelectionMode="Single" SelectedDatesChanged="Calendar_SelectedDatesChanged" />
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-                <Border x:Name="DateSegment" Grid.Column="2" Padding="4,0" BorderThickness="0,0,0,3" Background="Transparent" Tapped="DateSegment_Tapped">
-                    <TextBlock x:Name="DateText" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Bottom" />
-                </Border>
-                <Border x:Name="TimeSegment" Grid.Column="3" Padding="4,0" BorderThickness="0,0,0,3" Background="Transparent" Tapped="TimeSegment_Tapped">
-                    <TextBlock x:Name="TimeText" FontSize="40" FontWeight="SemiBold" />
-                </Border>
-            </Grid>
-
-            <InfoBar x:Name="StatusBar" Grid.Row="1" IsClosable="False" IsOpen="False">
+            <InfoBar x:Name="StatusBar" Grid.Row="0" IsClosable="False" IsOpen="False">
                 <InfoBar.ActionButton>
                     <Button x:Name="AmbiguityButton" AllowFocusOnInteraction="False" Click="AmbiguityButton_Click" />
                 </InfoBar.ActionButton>
             </InfoBar>
 
-            <StackPanel x:Name="RowsPanel" Grid.Row="2" Spacing="2" />
+            <!-- 兩列時區，直接在列上輸入 -->
+            <StackPanel x:Name="RowsPanel" Grid.Row="1" Spacing="24" VerticalAlignment="Center" />
 
-            <HyperlinkButton x:Name="AddRowButton" Grid.Row="3" Content="＋ 新增時區" AllowFocusOnInteraction="False" Click="AddRow_Click" />
-
-            <!-- 數字鍵盤 -->
-            <Grid Grid.Row="4" RowSpacing="4" ColumnSpacing="4" MinHeight="260">
+            <!-- 數字鍵盤：有最大尺寸，視窗放大時置中不再變大 -->
+            <Grid Grid.Row="2" MaxWidth="440" RowSpacing="4" ColumnSpacing="4">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="*" />

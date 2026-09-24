@@ -12,35 +12,33 @@ public class ZoneCatalogTests
     {
         Assert.Same(Catalog.Utc, Catalog.All[0]);
         Assert.Same(Catalog.Taipei, Catalog.All[1]);
-        Assert.Equal("UTC", Catalog.Utc.DisplayName);
+        Assert.Equal("UTC (UTC+00:00)", Catalog.Utc.DisplayName);
         Assert.Equal(TimeSpan.Zero, Catalog.Utc.FixedOffset);
-        Assert.Equal("台北 (Asia/Taipei)", Catalog.Taipei.DisplayName);
+        Assert.Equal("台北 (UTC+08:00)", Catalog.Taipei.DisplayName);
         Assert.False(Catalog.Taipei.IsFixed);
         Assert.False(Catalog.Taipei.IsFallback);
     }
 
     [Fact]
-    public void Fixed_offsets_follow_sorted_and_only_real_offsets()
+    public void No_fixed_offsets_after_utc_and_cities_sorted_by_standard_offset()
     {
-        var fixedOffsets = Catalog.All.Skip(2).TakeWhile(z => z.IsFixed).Select(z => z.FixedOffset).ToList();
-        Assert.Equal(fixedOffsets.Order().ToList(), fixedOffsets);
-        Assert.Equal(TimeSpan.FromHours(-12), fixedOffsets[0]);
-        Assert.Equal(TimeSpan.FromHours(14), fixedOffsets[^1]);
-        Assert.Contains(new TimeSpan(5, 30, 0), fixedOffsets);
-        Assert.Contains(new TimeSpan(5, 45, 0), fixedOffsets);
-        Assert.Contains(TimeSpan.FromHours(8), fixedOffsets);
-        Assert.DoesNotContain(TimeSpan.Zero, fixedOffsets);
-        Assert.DoesNotContain(new TimeSpan(5, 15, 0), fixedOffsets);
+        var rest = Catalog.All.Skip(2).ToList();
+        Assert.All(rest, z => Assert.False(z.IsFixed));
+        var offsets = rest.Select(z => z.City!.BaseUtcOffset).ToList();
+        Assert.Equal(offsets.Order().ToList(), offsets);
     }
 
     [Fact]
-    public void Cities_come_after_fixed_offsets_without_duplicates_of_utc_or_taipei()
+    public void Every_label_is_name_then_standard_offset()
     {
-        var rest = Catalog.All.Skip(2).ToList();
-        var firstCity = rest.FindIndex(z => !z.IsFixed);
-        Assert.True(firstCity > 0);
-        Assert.All(rest.Skip(firstCity), z => Assert.False(z.IsFixed));
+        Assert.All(Catalog.All, z => Assert.Matches(@"^[^(\s].* \(UTC[+-]\d\d:\d\d\)$", z.DisplayName));
+        var eastern = Catalog.All.First(z => z.Id == "Eastern Standard Time");
+        Assert.EndsWith(" (UTC-05:00)", eastern.DisplayName);
+    }
 
+    [Fact]
+    public void Cities_have_no_duplicates_of_utc_or_taipei()
+    {
         var cities = Catalog.All.Where(z => !z.IsFixed).ToList();
         Assert.Single(cities, z => z.Id == ZoneCatalog.TaipeiId);
         Assert.DoesNotContain(cities, z => z.Id.StartsWith("UTC", StringComparison.OrdinalIgnoreCase));
@@ -55,6 +53,7 @@ public class ZoneCatalogTests
         Assert.True(catalog.Taipei.IsFallback);
         Assert.True(catalog.Taipei.IsFixed);
         Assert.Equal(TimeSpan.FromHours(8), catalog.Taipei.FixedOffset);
+        Assert.Equal("台北 (UTC+08:00)", catalog.Taipei.DisplayName);
         Assert.Same(catalog.Taipei, catalog.All[1]);
     }
 
@@ -92,6 +91,6 @@ public class ZoneCatalogTests
         Assert.Equal(Catalog.All.Count, Catalog.Filter("  ").Count);
 
     [Fact]
-    public void Filter_matches_fixed_offset_text() =>
-        Assert.Contains(Catalog.Filter("+05:45"), z => z.IsFixed && z.FixedOffset == new TimeSpan(5, 45, 0));
+    public void Filter_matches_offset_text() =>
+        Assert.Contains(Catalog.Filter("+05:45"), z => z.City?.BaseUtcOffset == new TimeSpan(5, 45, 0));
 }

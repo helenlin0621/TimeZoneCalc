@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -18,19 +18,21 @@ public sealed partial class MainWindow : Window
     private readonly ZoneCatalog _catalog = ZoneCatalog.CreateDefault();
     private readonly CalculatorState _state;
     private readonly List<RowView> _rowViews = [];
-    private bool _syncingCalendar;
 
     public MainWindow()
     {
         InitializeComponent();
-        ResizeForDpi(560, 760);
+        ResizeForDpi(520, 720);
         if (MicaController.IsSupported())
             SystemBackdrop = new MicaBackdrop();
 
-        DatePickerCalendar.MinDate = new DateTimeOffset(new DateTime(DigitEntry.MinYear, 1, 1));
-        DatePickerCalendar.MaxDate = new DateTimeOffset(new DateTime(DigitEntry.MaxYear, 12, 31));
-
         _state = new CalculatorState(_catalog, () => DateTimeOffset.UtcNow);
+        for (var i = 0; i < _state.Rows.Count; i++)
+        {
+            var view = new RowView(i, _catalog, _state, FocusHost);
+            _rowViews.Add(view);
+            RowsPanel.Children.Add(view.Root);
+        }
         _state.Changed += (_, _) => Render();
         Host.Loaded += (_, _) => FocusXamlIsland();
         Activated += (_, e) =>
@@ -57,34 +59,10 @@ public sealed partial class MainWindow : Window
 
     private void Render()
     {
-        DateText.Text = _state.DateEntry.Display;
-        TimeText.Text = _state.TimeEntry.Display;
-        DateText.Foreground = Theme.Get(_state.Status == InputStatus.InvalidDate
-            ? "SystemFillColorCriticalBrush"
-            : "TextFillColorPrimaryBrush");
-        var accent = Theme.Get("AccentFillColorDefaultBrush");
-        DateSegment.BorderBrush = _state.ActiveSegment == EntryMode.Date ? accent : Theme.Transparent;
-        TimeSegment.BorderBrush = _state.ActiveSegment == EntryMode.Time ? accent : Theme.Transparent;
-
-        if (_rowViews.Count != _state.Rows.Count)
-            RebuildRows();
+        var dateInvalid = _state.Status == InputStatus.InvalidDate;
         for (var i = 0; i < _rowViews.Count; i++)
-            _rowViews[i].Update(_state.Rows[i], i == _state.ActiveIndex, _state.CanRemoveRow);
-        AddRowButton.Visibility = _state.CanAddRow ? Visibility.Visible : Visibility.Collapsed;
-
+            _rowViews[i].Update(_state.Rows[i], i == _state.ActiveIndex, _state.ActiveSegment, dateInvalid);
         RenderStatus();
-    }
-
-    private void RebuildRows()
-    {
-        RowsPanel.Children.Clear();
-        _rowViews.Clear();
-        for (var i = 0; i < _state.Rows.Count; i++)
-        {
-            var view = new RowView(i, _catalog, _state, CopyRow, FocusHost);
-            _rowViews.Add(view);
-            RowsPanel.Children.Add(view.Root);
-        }
     }
 
     private void RenderStatus()
@@ -121,25 +99,22 @@ public sealed partial class MainWindow : Window
         StatusBar.IsOpen = true;
     }
 
-    private void CopyRow(int index)
+    // 沒有框選文字時 Ctrl+C 複製輸入列的完整時間
+    private void CopyActiveRow()
     {
-        var row = _state.Rows[index];
+        var row = _state.ActiveRow;
         if (!row.CanCopy)
-        {
-            _rowViews[index].Flash("沒有可複製的時間");
             return;
-        }
         try
         {
             var package = new DataPackage();
             package.SetText(row.Text);
             Clipboard.SetContent(package);
             Clipboard.Flush();
-            _rowViews[index].Flash("已複製");
         }
         catch (Exception)
         {
-            _rowViews[index].Flash("複製失敗");
+            ShowStatus(InfoBarSeverity.Warning, "複製失敗");
         }
     }
 
@@ -147,8 +122,8 @@ public sealed partial class MainWindow : Window
 
     private void Host_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // 在時區篩選框打字時不攔截，讓文字框自己處理
-        if (FocusManager.GetFocusedElement(Host.XamlRoot) is TextBox)
+        var focused = FocusManager.GetFocusedElement(Host.XamlRoot);
+        if (focused is TextBox)
             return;
 
         var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control)
@@ -181,7 +156,11 @@ public sealed partial class MainWindow : Window
                 _state.SetNow();
                 break;
             case VirtualKey.C when ctrl:
-                CopyRow(_state.ActiveIndex);
+                // 有框選文字就讓文字自己複製（小算盤模式）
+                if (focused is RichTextBlock { SelectedText.Length: > 0 })
+                    e.Handled = false;
+                else
+                    CopyActiveRow();
                 break;
             default:
                 e.Handled = false;
@@ -198,43 +177,7 @@ public sealed partial class MainWindow : Window
 
     private void Back_Click(object sender, RoutedEventArgs e) => _state.Backspace();
 
-    private void AddRow_Click(object sender, RoutedEventArgs e) => _state.AddRow();
-
     private void AmbiguityButton_Click(object sender, RoutedEventArgs e) => _state.ToggleAmbiguity();
-
-    private void DateSegment_Tapped(object sender, TappedRoutedEventArgs e)
-    {
-        _state.SetSegment(EntryMode.Date);
-        FocusHost();
-    }
-
-    private void TimeSegment_Tapped(object sender, TappedRoutedEventArgs e)
-    {
-        _state.SetSegment(EntryMode.Time);
-        FocusHost();
-    }
-
-    private void CalendarFlyout_Opening(object sender, object e)
-    {
-        _syncingCalendar = true;
-        DatePickerCalendar.SelectedDates.Clear();
-        if (_state.DateEntry.Date is { } date)
-        {
-            var value = new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue));
-            DatePickerCalendar.SelectedDates.Add(value);
-            DatePickerCalendar.SetDisplayDate(value);
-        }
-        _syncingCalendar = false;
-    }
-
-    private void Calendar_SelectedDatesChanged(CalendarView sender, CalendarViewSelectedDatesChangedEventArgs args)
-    {
-        if (_syncingCalendar || args.AddedDates.Count == 0)
-            return;
-        _state.SetDate(DateOnly.FromDateTime(args.AddedDates[0].Date));
-        CalendarFlyout.Hide();
-        FocusHost();
-    }
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);

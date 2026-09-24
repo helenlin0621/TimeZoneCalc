@@ -141,50 +141,17 @@ public class CalculatorStateTests
     }
 
     [Fact]
-    public void SetDate_from_calendar_keeps_time()
+    public void Editing_second_row_converts_back_to_first()
     {
+        // 使用者的例子：UTC 00:00 ↔ 台北 08:00；把台北改成 16:00，UTC 變 08:00
         var s = Create();
-        s.SetDate(new DateOnly(2026, 1, 1));
-        Assert.Equal("2026-01-01 14:32:05", s.Rows[1].Text);
-    }
-
-    [Fact]
-    public void Rows_are_limited_to_one_through_five()
-    {
-        var s = Create();
-        for (var i = 0; i < 10; i++)
-            s.AddRow();
-        Assert.Equal(CalculatorState.MaxRows, s.Rows.Count);
-        Assert.False(s.CanAddRow);
-        Assert.Same(Catalog.Utc, s.Rows[4].Zone);
-        Assert.Equal("2026-09-24 06:32:05", s.Rows[4].Text);
-        for (var i = 0; i < 10; i++)
-            s.RemoveRow(0);
-        Assert.Single(s.Rows);
-        Assert.False(s.CanRemoveRow);
-    }
-
-    [Fact] // Review Focus 5
-    public void Removing_active_row_activates_first_row_with_same_instant()
-    {
-        var s = Create();
+        Enter(s, "20260924", "000000");
+        Assert.Equal("2026-09-24 08:00:00", s.Rows[1].Text);
         s.SetActiveRow(1);
-        s.RemoveRow(1);
-        Assert.Equal(0, s.ActiveIndex);
-        Assert.Equal("06:32:05", s.TimeEntry.Display);
-    }
-
-    [Fact] // Review Focus 5
-    public void Removing_row_before_active_keeps_same_active_row()
-    {
-        var s = Create();
-        s.AddRow();
-        s.SetZone(2, NewYork);
-        s.SetActiveRow(2);
-        s.RemoveRow(0);
-        Assert.Equal(1, s.ActiveIndex);
-        Assert.Same(NewYork, s.ActiveRow.Zone);
-        Assert.Equal("02:32:05", s.TimeEntry.Display);
+        s.SetSegment(EntryMode.Time);
+        Type(s, "160000");
+        Assert.Equal("2026-09-24 08:00:00", s.Rows[0].Text);
+        Assert.Equal(2, s.Rows.Count);
     }
 
     [Fact] // Review Focus 2

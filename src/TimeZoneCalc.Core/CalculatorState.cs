@@ -16,11 +16,11 @@ public sealed class ZoneRow
 // 整個計算器的狀態；UI 只負責把它畫出來、把按鍵轉進來
 public sealed class CalculatorState
 {
-    public const int MaxRows = 5;
     public const string Blank = "—";
 
-    private readonly ZoneCatalog _catalog;
     private readonly Func<DateTimeOffset> _clock;
+
+    // 固定兩列，互相換算（像小算盤的 HEX／DEC）
     private readonly List<ZoneRow> _rows;
 
     // 最後一次成功換算的瞬間；輸入暫時無效時，其他列顯示它（灰色）
@@ -28,7 +28,6 @@ public sealed class CalculatorState
 
     public CalculatorState(ZoneCatalog catalog, Func<DateTimeOffset> clock)
     {
-        _catalog = catalog;
         _clock = clock;
         _rows = [new ZoneRow(catalog.Utc), new ZoneRow(catalog.Taipei)];
         SetNow();
@@ -44,8 +43,6 @@ public sealed class CalculatorState
     public DigitEntry TimeEntry { get; } = new(EntryMode.Time);
     public AmbiguityChoice Ambiguity { get; private set; }
     public InputStatus Status { get; private set; }
-    public bool CanAddRow => _rows.Count < MaxRows;
-    public bool CanRemoveRow => _rows.Count > 1;
 
     private DigitEntry ActiveEntry => ActiveSegment == EntryMode.Date ? DateEntry : TimeEntry;
 
@@ -71,12 +68,6 @@ public sealed class CalculatorState
     }
 
     public void SetNow() => LoadInstant(_clock());
-
-    public void SetDate(DateOnly date)
-    {
-        DateEntry.Load(date);
-        OnInputEdited();
-    }
 
     public void SetSegment(EntryMode segment)
     {
@@ -104,31 +95,6 @@ public sealed class CalculatorState
         _rows[index].Zone = zone;
         if (index == ActiveIndex)
             Ambiguity = AmbiguityChoice.First;
-        Recompute();
-    }
-
-    public void AddRow()
-    {
-        if (!CanAddRow)
-            return;
-        _rows.Add(new ZoneRow(_catalog.Utc));
-        Recompute();
-    }
-
-    public void RemoveRow(int index)
-    {
-        if (!CanRemoveRow || index < 0 || index >= _rows.Count)
-            return;
-        var removedActive = index == ActiveIndex;
-        _rows.RemoveAt(index);
-        if (removedActive)
-        {
-            ActiveIndex = 0;
-            ReloadActiveRow();
-            return;
-        }
-        if (index < ActiveIndex)
-            ActiveIndex--;
         Recompute();
     }
 
