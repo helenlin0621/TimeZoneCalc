@@ -1,5 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -7,6 +8,8 @@ using Microsoft.UI.Xaml.Media;
 using TimeZoneCalc.Core;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace TimeZoneCalc;
 
@@ -29,8 +32,27 @@ public sealed partial class MainWindow : Window
 
         _state = new CalculatorState(_catalog, () => DateTimeOffset.UtcNow);
         _state.Changed += (_, _) => Render();
-        Host.Loaded += (_, _) => FocusHost();
+        Host.Loaded += (_, _) => FocusXamlIsland();
+        Activated += (_, e) =>
+        {
+            if (e.WindowActivationState != WindowActivationState.Deactivated)
+                FocusXamlIsland();
+        };
         Render();
+    }
+
+    // 視窗被程式啟用（非滑鼠點擊）時，Win32 焦點會停在最外層視窗，
+    // 鍵盤訊息送不進 XAML；把焦點交給 XAML 所在的子視窗
+    private void FocusXamlIsland()
+    {
+        if (Host.XamlRoot is null)
+            return;   // 還沒載入完成；Host.Loaded 會處理
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var bridge = FindWindowEx(hwnd, IntPtr.Zero, "Microsoft.UI.Content.DesktopChildSiteBridge", null);
+        var site = bridge == IntPtr.Zero ? IntPtr.Zero : FindWindowEx(bridge, IntPtr.Zero, "InputSiteWindowClass", null);
+        if (site != IntPtr.Zero && GetFocus() == hwnd)
+            SetFocus(site);
+        FocusHost();
     }
 
     private void Render()
@@ -123,6 +145,50 @@ public sealed partial class MainWindow : Window
 
     private void FocusHost() => Host.Focus(FocusState.Programmatic);
 
+    private void Host_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        // 在時區篩選框打字時不攔截，讓文字框自己處理
+        if (FocusManager.GetFocusedElement(Host.XamlRoot) is TextBox)
+            return;
+
+        var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control)
+            .HasFlag(CoreVirtualKeyStates.Down);
+        e.Handled = true;
+        switch (e.Key)
+        {
+            case >= VirtualKey.Number0 and <= VirtualKey.Number9 when !ctrl:
+                _state.PushDigit(e.Key - VirtualKey.Number0);
+                break;
+            case >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9:
+                _state.PushDigit(e.Key - VirtualKey.NumberPad0);
+                break;
+            case VirtualKey.Back:
+                _state.Backspace();
+                break;
+            case VirtualKey.Escape:
+                _state.Clear();
+                break;
+            case VirtualKey.Tab:
+                _state.ToggleSegment();
+                break;
+            case VirtualKey.Up:
+                _state.MoveActive(-1);
+                break;
+            case VirtualKey.Down:
+                _state.MoveActive(1);
+                break;
+            case VirtualKey.N when !ctrl:
+                _state.SetNow();
+                break;
+            case VirtualKey.C when ctrl:
+                CopyRow(_state.ActiveIndex);
+                break;
+            default:
+                e.Handled = false;
+                break;
+        }
+    }
+
     private void Digit_Click(object sender, RoutedEventArgs e) =>
         _state.PushDigit(int.Parse((string)((Button)sender).Tag));
 
@@ -172,6 +238,15 @@ public sealed partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr childAfter, string className, string? windowName);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetFocus();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr hwnd);
 
     private void ResizeForDpi(int width, int height)
     {

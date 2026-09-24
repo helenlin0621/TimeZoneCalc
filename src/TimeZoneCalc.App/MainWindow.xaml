@@ -6,7 +6,7 @@
     Title="時區計算器">
 
     <!-- Host 是可取得焦點的外框，讓鍵盤輸入不需要先點任何欄位 -->
-    <UserControl x:Name="Host" IsTabStop="True" UseSystemFocusVisuals="False">
+    <UserControl x:Name="Host" IsTabStop="True" UseSystemFocusVisuals="False" PreviewKeyDown="Host_PreviewKeyDown">
         <Grid x:Name="Root" Padding="12" RowSpacing="8">
             <Grid.Resources>
                 <Style x:Key="KeyButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
