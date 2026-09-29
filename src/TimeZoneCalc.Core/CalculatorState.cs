@@ -17,10 +17,13 @@ public sealed class ZoneRow
 public sealed class CalculatorState
 {
     public const string Blank = "—";
+    public const int MinRows = 2;
+    public const int MaxRows = 5;
 
+    private readonly ZoneCatalog _catalog;
     private readonly Func<DateTimeOffset> _clock;
 
-    // 固定兩列，互相換算（像小算盤的 HEX／DEC）
+    // 預設兩列，互相換算（像小算盤的 HEX／DEC）；可在最後面加減到 2–5 列
     private readonly List<ZoneRow> _rows;
 
     // 最後一次成功換算的瞬間；輸入暫時無效時，其他列顯示它（灰色）
@@ -28,6 +31,7 @@ public sealed class CalculatorState
 
     public CalculatorState(ZoneCatalog catalog, Func<DateTimeOffset> clock)
     {
+        _catalog = catalog;
         _clock = clock;
         _rows = [new ZoneRow(catalog.Utc), new ZoneRow(catalog.Taipei)];
         SetNow();
@@ -100,6 +104,33 @@ public sealed class CalculatorState
         if (index == ActiveIndex)
             Ambiguity = AmbiguityChoice.First;
         Recompute();
+    }
+
+    public bool CanAddRow => _rows.Count < MaxRows;
+    public bool CanRemoveRow => _rows.Count > MinRows;
+
+    // 在最後面加一列 UTC，顯示同一瞬間
+    public void AddRow()
+    {
+        if (!CanAddRow)
+            return;
+        _rows.Add(new ZoneRow(_catalog.Utc));
+        Recompute();
+    }
+
+    // 移除最後一列；若它是輸入列，輸入列移到上一列並保留同一瞬間
+    public void RemoveLastRow()
+    {
+        if (!CanRemoveRow)
+            return;
+        _rows.RemoveAt(_rows.Count - 1);
+        if (ActiveIndex < _rows.Count)
+        {
+            Recompute();
+            return;
+        }
+        ActiveIndex = _rows.Count - 1;
+        ReloadActiveRow();
     }
 
     public void ToggleAmbiguity()

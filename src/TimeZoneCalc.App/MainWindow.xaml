@@ -28,8 +28,10 @@
                 </InfoBar.ActionButton>
             </InfoBar>
 
-            <!-- 兩列時區，直接在列上輸入 -->
-            <StackPanel x:Name="RowsPanel" Grid.Row="1" Spacing="24" VerticalAlignment="Center" />
+            <!-- 時區列（2–5 列），直接在列上輸入；螢幕放不下時可捲動 -->
+            <ScrollViewer x:Name="RowsScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
+                <StackPanel x:Name="RowsPanel" Spacing="24" VerticalAlignment="Center" />
+            </ScrollViewer>
 
             <!-- 數字鍵盤：有最大尺寸，視窗放大時置中不再變大 -->
             <Grid Grid.Row="2" MaxWidth="440" RowSpacing="4" ColumnSpacing="4">
@@ -59,7 +61,9 @@
                 <Button Grid.Row="3" Grid.Column="0" Content="1" Tag="1" Style="{StaticResource KeyButton}" Click="Digit_Click" />
                 <Button Grid.Row="3" Grid.Column="1" Content="2" Tag="2" Style="{StaticResource KeyButton}" Click="Digit_Click" />
                 <Button Grid.Row="3" Grid.Column="2" Content="3" Tag="3" Style="{StaticResource KeyButton}" Click="Digit_Click" />
+                <Button x:Name="AddRowButton" Grid.Row="4" Grid.Column="0" Content="+" Style="{StaticResource KeyButton}" Click="AddRow_Click" ToolTipService.ToolTip="加一列" />
                 <Button Grid.Row="4" Grid.Column="1" Content="0" Tag="0" Style="{StaticResource KeyButton}" Click="Digit_Click" />
+                <Button x:Name="RemoveRowButton" Grid.Row="4" Grid.Column="2" Content="−" Style="{StaticResource KeyButton}" Click="RemoveRow_Click" ToolTipService.ToolTip="減少最後一列" />
             </Grid>
         </Grid>
     </UserControl>

@@ -270,6 +270,58 @@ public class CalculatorStateTests
     }
 
     [Fact]
+    public void Add_row_appends_utc_showing_same_instant()
+    {
+        var s = Create();
+        s.AddRow();
+        Assert.Equal(3, s.Rows.Count);
+        Assert.Same(Catalog.Utc, s.Rows[2].Zone);
+        Assert.Equal("2026-09-24 06:32:05", s.Rows[2].Text);
+        Assert.Equal(0, s.ActiveIndex);
+    }
+
+    [Fact]
+    public void Rows_are_limited_to_two_through_five()
+    {
+        var s = Create();
+        Assert.True(s.CanAddRow);
+        Assert.False(s.CanRemoveRow);
+        for (var i = 0; i < 10; i++)
+            s.AddRow();
+        Assert.Equal(CalculatorState.MaxRows, s.Rows.Count);
+        Assert.False(s.CanAddRow);
+        for (var i = 0; i < 10; i++)
+            s.RemoveLastRow();
+        Assert.Equal(CalculatorState.MinRows, s.Rows.Count);
+        Assert.False(s.CanRemoveRow);
+    }
+
+    [Fact]
+    public void Removing_last_row_while_active_moves_to_previous_row_and_keeps_instant()
+    {
+        var s = Create();
+        s.AddRow();
+        s.SetZone(2, NewYork);
+        s.SetActiveRow(2);
+        s.RemoveLastRow();
+        Assert.Equal(2, s.Rows.Count);
+        Assert.Equal(1, s.ActiveIndex);
+        Assert.Equal("2026-09-24 14:32:05", s.Entry.Display);
+        Assert.Equal("2026-09-24 06:32:05", s.Rows[0].Text);
+    }
+
+    [Fact]
+    public void Removing_last_row_keeps_other_active_row()
+    {
+        var s = Create();
+        s.AddRow();
+        Type(s, "12");
+        s.RemoveLastRow();
+        Assert.Equal(0, s.ActiveIndex);
+        Assert.Equal("2026-09-24 12:32:05", s.Rows[0].Text);
+    }
+
+    [Fact]
     public void Changed_fires_on_accepted_input_only()
     {
         var s = Create();

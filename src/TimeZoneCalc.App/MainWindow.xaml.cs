@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -27,12 +28,7 @@ public sealed partial class MainWindow : Window
             SystemBackdrop = new MicaBackdrop();
 
         _state = new CalculatorState(_catalog, () => DateTimeOffset.UtcNow);
-        for (var i = 0; i < _state.Rows.Count; i++)
-        {
-            var view = new RowView(i, _catalog, _state, FocusHost);
-            _rowViews.Add(view);
-            RowsPanel.Children.Add(view.Root);
-        }
+        SyncRowViews();
         _state.Changed += (_, _) => Render();
         Host.Loaded += (_, _) => FocusXamlIsland();
         Activated += (_, e) =>
@@ -59,9 +55,45 @@ public sealed partial class MainWindow : Window
 
     private void Render()
     {
+        var added = SyncRowViews();
         for (var i = 0; i < _rowViews.Count; i++)
             _rowViews[i].Update(_state.Rows[i], i == _state.ActiveIndex, _state.ActiveField);
+        AddRowButton.IsEnabled = _state.CanAddRow;
+        RemoveRowButton.IsEnabled = _state.CanRemoveRow;
+        if (added != 0)
+            GrowWindow(added);
         RenderStatus();
+    }
+
+    // 列只會從最後面加減；回傳這次多了（正）或少了（負）幾列
+    private int SyncRowViews()
+    {
+        var delta = _state.Rows.Count - _rowViews.Count;
+        while (_rowViews.Count < _state.Rows.Count)
+        {
+            var view = new RowView(_rowViews.Count, _catalog, _state, FocusHost);
+            _rowViews.Add(view);
+            RowsPanel.Children.Add(view.Root);
+        }
+        while (_rowViews.Count > _state.Rows.Count)
+        {
+            _rowViews.RemoveAt(_rowViews.Count - 1);
+            RowsPanel.Children.RemoveAt(RowsPanel.Children.Count - 1);
+        }
+        return delta;
+    }
+
+    // 每加減一列，視窗高度跟著加減一列的高度；最多長到螢幕可用高度
+    private void GrowWindow(int rows)
+    {
+        var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96.0;
+        var rowHeight = (_rowViews[0].Root.ActualHeight > 0 ? _rowViews[0].Root.ActualHeight : 110) + RowsPanel.Spacing;
+        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+        var height = Math.Min(AppWindow.Size.Height + (int)(rows * rowHeight * scale), workArea.Height);
+        AppWindow.Resize(new SizeInt32(AppWindow.Size.Width, Math.Max(height, (int)(720 * scale))));
+        var position = AppWindow.Position;
+        if (position.Y + height > workArea.Y + workArea.Height)
+            AppWindow.Move(new PointInt32(position.X, Math.Max(workArea.Y, workArea.Y + workArea.Height - height)));
     }
 
     private void RenderStatus()
@@ -155,6 +187,14 @@ public sealed partial class MainWindow : Window
             case VirtualKey.Down:
                 _state.MoveActive(1);
                 break;
+            case VirtualKey.Add:
+            case OemPlus when shift:
+                _state.AddRow();
+                break;
+            case VirtualKey.Subtract:
+            case OemMinus:
+                _state.RemoveLastRow();
+                break;
             case VirtualKey.N when !ctrl:
                 _state.SetNow();
                 break;
@@ -181,6 +221,14 @@ public sealed partial class MainWindow : Window
     private void Back_Click(object sender, RoutedEventArgs e) => _state.Backspace();
 
     private void AmbiguityButton_Click(object sender, RoutedEventArgs e) => _state.ToggleAmbiguity();
+
+    private void AddRow_Click(object sender, RoutedEventArgs e) => _state.AddRow();
+
+    private void RemoveRow_Click(object sender, RoutedEventArgs e) => _state.RemoveLastRow();
+
+    // 主鍵盤上的 =/+ 與 -/_ 鍵
+    private const VirtualKey OemPlus = (VirtualKey)0xBB;
+    private const VirtualKey OemMinus = (VirtualKey)0xBD;
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
