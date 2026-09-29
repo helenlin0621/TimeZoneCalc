@@ -204,3 +204,7 @@
 ## 修訂 4（2026-09-29）：發佈改為單一 exe
 
 取代 §3「不做單一 exe」。實測 Windows App SDK 2.5.1 + `PublishSingleFile` + `IncludeAllContentForSelfExtract` 可正常執行（啟動約 0.7 秒、時區面板等 XAML 資源正常）。產出只有 `TimeZoneCalc.exe`（約 219 MB，zip 約 83 MB）；第一次執行時解壓到 `%TEMP%\.net\TimeZoneCalc`（使用者可寫入，不需管理者權限）。已知限制：若公司政策禁止從 `%TEMP%` 執行程式（AppLocker 等），單一 exe 可能無法啟動，屆時改回資料夾版（移除 csproj 的 Release 單檔設定）。
+
+## 修訂 5（2026-09-29）：每次都同時產出兩種版本
+
+`build\publish.cmd` 一次產出資料夾版（`publish\folder\TimeZoneCalc\`，`-p:PublishSingleFile=false`）與單一 exe 版（`publish\single\TimeZoneCalc.exe`），各附一個 zip。兩者功能相同；資料夾版不需解壓到 `%TEMP%`，供禁止從暫存資料夾執行程式的環境使用。
