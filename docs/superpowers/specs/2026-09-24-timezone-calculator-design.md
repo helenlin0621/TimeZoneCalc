@@ -208,3 +208,7 @@
 ## 修訂 5（2026-09-29）：每次都同時產出兩種版本
 
 `build\publish.cmd` 一次產出資料夾版（`publish\folder\TimeZoneCalc\`，`-p:PublishSingleFile=false`）與單一 exe 版（`publish\single\TimeZoneCalc.exe`），各附一個 zip。兩者功能相同；資料夾版不需解壓到 `%TEMP%`，供禁止從暫存資料夾執行程式的環境使用。
+
+## 修訂 6（2026-09-29）：可用國家搜尋時區
+
+時區面板的搜尋除了名稱、城市別名，也比對國名（繁中、英文、ISO 代碼）。對照資料來自 Unicode CLDR 的 `windowsZones.xml`（Windows 時區 → 使用國家）與 zh-Hant／en 國名，由 `tools\gen-country-data.ps1` 產生 `CountryData.g.cs` 內建在程式中，執行時不需連網。清單顯示格式不變，不顯示國家。

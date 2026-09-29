@@ -86,6 +86,31 @@ public class ZoneCatalogTests
     public void Match_returns_first_filtered_zone() =>
         Assert.Same(Catalog.Taipei, Catalog.Match("tai"));
 
+    [Theory]
+    [InlineData("日本", "Tokyo Standard Time")]
+    [InlineData("japan", "Tokyo Standard Time")]
+    [InlineData("美國", "Eastern Standard Time")]
+    [InlineData("美國", "Pacific Standard Time")]
+    [InlineData("United States", "Hawaiian Standard Time")]
+    [InlineData("德國", "W. Europe Standard Time")]
+    [InlineData("Germany", "W. Europe Standard Time")]
+    [InlineData("英國", "GMT Standard Time")]
+    [InlineData("UK", "GMT Standard Time")]
+    [InlineData("加拿大", "Eastern Standard Time")]
+    [InlineData("台灣", ZoneCatalog.TaipeiId)]
+    [InlineData("taiwan", ZoneCatalog.TaipeiId)]
+    public void Filter_finds_zones_by_country_name(string query, string zoneId) =>
+        Assert.Contains(Catalog.Filter(query), z => z.Id == zoneId);
+
+    [Fact]
+    public void Country_with_many_zones_lists_them_all()
+    {
+        var us = Catalog.Filter("美國").Select(z => z.Id).ToList();
+        foreach (var id in new[] { "Eastern Standard Time", "Central Standard Time", "Mountain Standard Time",
+                                   "Pacific Standard Time", "Alaskan Standard Time", "Hawaiian Standard Time" })
+            Assert.Contains(id, us);
+    }
+
     [Fact]
     public void Filter_blank_returns_all() =>
         Assert.Equal(Catalog.All.Count, Catalog.Filter("  ").Count);

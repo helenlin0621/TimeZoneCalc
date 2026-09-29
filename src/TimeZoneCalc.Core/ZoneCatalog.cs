@@ -73,7 +73,11 @@ public sealed class ZoneCatalog
             return All;
         return All.Where(z => z.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
                            || z.Id.Contains(query, StringComparison.OrdinalIgnoreCase)
-                           || (!z.IsFixed && Aliases.TryGetValue(z.Id, out var alias)
-                               && alias.Contains(query, StringComparison.OrdinalIgnoreCase))).ToList();
+                           || Matches(Aliases, z.Id, query)
+                           || Matches(CountryData.Keywords, z.Id, query)).ToList();
     }
+
+    // 用城市別名或國名（繁中、英文、ISO 代碼）比對
+    private static bool Matches(IReadOnlyDictionary<string, string> keywords, string zoneId, string query) =>
+        keywords.TryGetValue(zoneId, out var words) && words.Contains(query, StringComparison.OrdinalIgnoreCase);
 }

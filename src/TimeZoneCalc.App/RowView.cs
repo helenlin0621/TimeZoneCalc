@@ -19,7 +19,7 @@ internal sealed class RowView
     private readonly TextBlock _zoneLabel = new() { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _zoneButton;
     private readonly Flyout _flyout = new() { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
-    private readonly TextBox _search = new() { PlaceholderText = "搜尋時區，例如 tai、紐約、+07:00" };
+    private readonly TextBox _search = new() { PlaceholderText = "搜尋城市或國家，例如 台北、日本、japan、+07:00" };
     private readonly ListView _list = new() { Height = 320, IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.None };
     private readonly RichTextBlock _value = new() { FontSize = 30, FontWeight = FontWeights.SemiBold, FontFamily = new FontFamily("Cascadia Mono, Consolas") };
     // 年月日時分秒各一個 Run，中間夾分隔符號
