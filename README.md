@@ -43,7 +43,7 @@
 build\publish.cmd
 ```
 
-產出 `publish\TimeZoneCalc\` 與 `publish\TimeZoneCalc-win-x64.zip`。
+產出 `publish\TimeZoneCalc.exe`（單一檔案）與 `publish\TimeZoneCalc-win-x64.zip`。
 
 只跑測試：
 
