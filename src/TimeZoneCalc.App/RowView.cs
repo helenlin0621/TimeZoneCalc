@@ -2,6 +2,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using TimeZoneCalc.Core;
 using Windows.System;
@@ -91,13 +92,14 @@ internal sealed class RowView
                 paragraph.Inlines.Add(_separators[i]);
         }
         _value.Blocks.Add(paragraph);
-        _value.Tapped += (_, e) =>
+        // 可框選的 RichTextBlock 會自己把點擊標成已處理，一般的 Tapped += 收不到，
+        // 要用 handledEventsToo 才拿得到
+        _value.AddHandler(UIElement.TappedEvent, new TappedEventHandler((_, e) =>
         {
-            var pos = _value.GetPositionFromPoint(e.GetPosition(_value));
             state.SetActiveRow(index);
-            state.SelectField(pos is null ? Field.Hour : FieldAt(pos.Offset));
+            state.SelectField(FieldAtX(e.GetPosition(_value).X));
             e.Handled = true;
-        };
+        }), handledEventsToo: true);
 
         var sub = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         sub.Children.Add(_offset);
@@ -127,14 +129,16 @@ internal sealed class RowView
     public Grid Root { get; }
 
     // 點在某欄或它後面的分隔符號上，都算那一欄
-    private Field FieldAt(int offset)
+    private Field FieldAtX(double x)
     {
         var field = Field.Year;
         for (var i = 1; i < _fields.Length; i++)
-            if (offset >= _fields[i].ContentStart.Offset)
+            if (x >= FieldStartX(_fields[i]))
                 field = (Field)i;
         return field;
     }
+
+    private static double FieldStartX(Run run) => run.ContentStart.GetCharacterRect(LogicalDirection.Forward).X;
 
     public void Update(ZoneRow row, bool isActive, Field activeField)
     {
