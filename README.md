@@ -6,12 +6,13 @@
 
 ## 使用（免安裝）
 
-1. 把 `TimeZoneCalc-win-x64.zip` 解壓到任意資料夾（例如桌面）。
-2. 雙擊資料夾內的 `TimeZoneCalc.exe`。
+只有一個檔案：`TimeZoneCalc.exe`（約 219 MB）。複製到任何位置，雙擊即可執行。
+傳檔時可改傳 `TimeZoneCalc-win-x64.zip`（約 83 MB，裡面就是同一個 exe）。
 
 - 支援 Windows 10 1809 以上、Windows 11（x64）。
 - 不需要管理者權限，不需要先安裝 .NET 或 Windows App SDK。
-- 解壓後資料夾約 226 MB，zip 約 88 MB。
+- 第一次執行時會把內含的執行環境解壓到 `%TEMP%\.net\TimeZoneCalc`（約 210 MB），之後直接使用；清掉暫存資料夾也沒關係，下次會再解壓。
+- 程式沒有數位簽章，第一次執行若出現「Windows 已保護您的電腦」，按「其他資訊」→「仍要執行」。
 - 程式崩潰時會寫 `%TEMP%\TimeZoneCalc-crash.txt`。
 
 ## 操作
