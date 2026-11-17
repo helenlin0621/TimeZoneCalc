@@ -7,6 +7,11 @@ cd /d "%~dp0.."
 dotnet test tests\TimeZoneCalc.Core.Tests\TimeZoneCalc.Core.Tests.csproj
 if errorlevel 1 exit /b 1
 if exist publish rmdir /s /q publish
+REM rmdir removes what it can and keeps going when a file is locked; stale files would end up in the zip
+if exist publish (
+    echo ERROR: could not delete the publish folder. Close programs using files in it and try again.
+    exit /b 1
+)
 dotnet publish src\TimeZoneCalc.App\TimeZoneCalc.App.csproj -c Release -p:Platform=x64 -p:PublishSingleFile=false -o publish\folder\TimeZoneCalc
 if errorlevel 1 exit /b 1
 dotnet publish src\TimeZoneCalc.App\TimeZoneCalc.App.csproj -c Release -p:Platform=x64 -o publish\single

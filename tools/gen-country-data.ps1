@@ -61,6 +61,8 @@ foreach ($id in $map.Keys) {
 [void]$sb.AppendLine("    };")
 [void]$sb.AppendLine("}")
 
-$full = Join-Path (Get-Location) $OutFile
+# Absolute paths are used as-is; relative ones are relative to the repo root, not the current directory
+$full = if ([IO.Path]::IsPathRooted($OutFile)) { $OutFile } else { Join-Path (Join-Path $PSScriptRoot "..") $OutFile }
+$full = [IO.Path]::GetFullPath($full)
 [IO.File]::WriteAllText($full, $sb.ToString(), (New-Object System.Text.UTF8Encoding $false))
-"Wrote $($map.Count) zones to $OutFile"
+"Wrote $($map.Count) zones to $full"

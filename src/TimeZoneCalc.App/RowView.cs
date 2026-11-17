@@ -28,6 +28,8 @@ internal sealed class RowView
     private static readonly string[] SeparatorText = ["-", "-", " ", ":", ":"];
     private readonly TextBlock _offset = new() { FontSize = 12 };
     private readonly TextBlock _note = new() { FontSize = 12, Visibility = Visibility.Collapsed };
+    private readonly TextBlock _flash = new() { FontSize = 12, Visibility = Visibility.Collapsed };
+    private readonly DispatcherTimer _flashTimer = new() { Interval = TimeSpan.FromSeconds(2.5) };
     private ZoneOption? _zone;
 
     public RowView(int index, ZoneCatalog catalog, CalculatorState state, Action returnFocus)
@@ -104,6 +106,12 @@ internal sealed class RowView
         var sub = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         sub.Children.Add(_offset);
         sub.Children.Add(_note);
+        sub.Children.Add(_flash);
+        _flashTimer.Tick += (_, _) =>
+        {
+            _flashTimer.Stop();
+            _flash.Visibility = Visibility.Collapsed;
+        };
 
         var content = new StackPanel { Spacing = 6 };
         content.Children.Add(_zoneButton);
@@ -127,6 +135,16 @@ internal sealed class RowView
     }
 
     public Grid Root { get; }
+
+    // 短暫的錯誤提示只佔這一列，不動上方狀態列
+    public void Flash(string message)
+    {
+        _flash.Text = message;
+        _flash.Foreground = Theme.Get("SystemFillColorCautionBrush");
+        _flash.Visibility = Visibility.Visible;
+        _flashTimer.Stop();
+        _flashTimer.Start();
+    }
 
     // 點在某欄或它後面的分隔符號上，都算那一欄
     private Field FieldAtX(double x)

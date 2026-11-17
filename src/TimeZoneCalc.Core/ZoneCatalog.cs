@@ -27,8 +27,9 @@ public sealed class ZoneCatalog
         ["AUS Eastern Standard Time"] = "Sydney 雪梨 Melbourne 墨爾本",
     };
 
-    public ZoneCatalog(IReadOnlyCollection<TimeZoneInfo> systemZones)
+    public ZoneCatalog(IReadOnlyCollection<TimeZoneInfo> systemZones, int? year = null)
     {
+        var labelYear = year ?? DateTime.UtcNow.Year;
         Utc = ZoneOption.FromOffset(TimeSpan.Zero, Label("UTC", TimeSpan.Zero), "UTC");
 
         var taipei = systemZones.FirstOrDefault(z => z.Id == TaipeiId);
@@ -39,14 +40,31 @@ public sealed class ZoneCatalog
         // Windows 的 "UTC"、"UTC-11" 之類不是城市，排除
         var cities = systemZones
             .Where(z => z.Id != TaipeiId && !z.Id.StartsWith("UTC", StringComparison.OrdinalIgnoreCase))
-            .Select(z => ZoneOption.FromCity(z, Label(CityName(z), z.BaseUtcOffset)))
-            .OrderBy(z => z.City!.BaseUtcOffset)
-            .ThenBy(z => z.DisplayName, StringComparer.CurrentCulture);
+            .Select(z => (Offset: LabelOffset(z, labelYear), Zone: z))
+            .Select(x => (x.Offset, Option: ZoneOption.FromCity(x.Zone, Label(CityName(x.Zone), x.Offset))))
+            .OrderBy(x => x.Offset)
+            .ThenBy(x => x.Option.DisplayName, StringComparer.CurrentCulture)
+            .Select(x => x.Option);
 
         All = [Utc, Taipei, .. cities];
     }
 
-    // 統一格式「名稱 (UTC±hh:mm)」，括號內為標準（非夏令）偏移量
+    // 選單括號內與排序用的偏移量：一般是標準（非夏令）偏移量；
+    // 但 Windows 把有些地區（例如 British Columbia）建模成「全年夏令」，標準偏移量從沒真正生效過，
+    // 這種就用該年實際生效的偏移量，否則選單寫 UTC-08:00、實際全年 UTC-07:00，搜尋 -07:00 也找不到
+    public static TimeSpan LabelOffset(TimeZoneInfo zone, int year)
+    {
+        if (!zone.SupportsDaylightSavingTime)
+            return zone.BaseUtcOffset;
+        var day = new DateTimeOffset(year, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        var effective = zone.GetUtcOffset(day);
+        for (var d = 0; d < 366 && day.Year == year; d++, day = day.AddDays(1))
+            if (!zone.IsDaylightSavingTime(day))
+                return zone.BaseUtcOffset;
+        return effective;
+    }
+
+    // 統一格式「名稱 (UTC±hh:mm)」
     private static string Label(string name, TimeSpan standardOffset) => $"{name} ({TimeFormat.Offset(standardOffset)})";
 
     // Windows 顯示名稱是 "(UTC+07:00) 克拉斯諾亞爾斯克"，去掉前面的偏移量

@@ -30,7 +30,13 @@ public sealed partial class MainWindow : Window
         _state = new CalculatorState(_catalog, () => DateTimeOffset.UtcNow);
         SyncRowViews();
         _state.Changed += (_, _) => Render();
-        Host.Loaded += (_, _) => FocusXamlIsland();
+        Host.Loaded += (_, _) =>
+        {
+            ApplyTheme();
+            FocusXamlIsland();
+        };
+        Host.ActualThemeChanged += (_, _) => ApplyTheme();
+        Host.CharacterReceived += Host_CharacterReceived;
         Activated += (_, e) =>
         {
             if (e.WindowActivationState != WindowActivationState.Deactivated)
@@ -51,6 +57,12 @@ public sealed partial class MainWindow : Window
         if (site != IntPtr.Zero && GetFocus() == hwnd)
             SetFocus(site);
         FocusHost();
+    }
+
+    private void ApplyTheme()
+    {
+        Theme.Actual = Host.ActualTheme;
+        Render();
     }
 
     private void Render()
@@ -102,18 +114,13 @@ public sealed partial class MainWindow : Window
         switch (_state.Status)
         {
             case InputStatus.NonexistentTime:
-                ShowStatus(InfoBarSeverity.Warning, "此時間因夏令時間切換而不存在");
+                ShowStatus(InfoBarSeverity.Warning, _state.StatusMessage);
                 break;
             case InputStatus.AmbiguousTime:
-            {
-                var first = _state.Ambiguity == AmbiguityChoice.First;
-                ShowStatus(InfoBarSeverity.Informational, first
-                    ? "此時間出現兩次，目前採用第一次出現（夏令時間）"
-                    : "此時間出現兩次，目前採用第二次出現（標準時間）");
-                AmbiguityButton.Content = first ? "改用第二次" : "改用第一次";
+                ShowStatus(InfoBarSeverity.Informational, _state.StatusMessage);
+                AmbiguityButton.Content = _state.Ambiguity == AmbiguityChoice.First ? "改用第二次" : "改用第一次";
                 AmbiguityButton.Visibility = Visibility.Visible;
                 break;
-            }
             default:
                 StatusBar.IsOpen = false;
                 break;
@@ -138,12 +145,15 @@ public sealed partial class MainWindow : Window
             var package = new DataPackage();
             package.SetText(row.Text);
             Clipboard.SetContent(package);
-            Clipboard.Flush();
         }
         catch (Exception)
         {
-            ShowStatus(InfoBarSeverity.Warning, "複製失敗");
+            _rowViews[_state.ActiveIndex].Flash("複製失敗");
+            return;
         }
+        // 內容已經交給剪貼簿；Flush 只是讓它在程式結束後還在，剪貼簿被別的程式佔用時會丟例外，不算複製失敗
+        try { Clipboard.Flush(); }
+        catch (Exception) { }
     }
 
     private void FocusHost() => Host.Focus(FocusState.Programmatic);
@@ -187,14 +197,6 @@ public sealed partial class MainWindow : Window
             case VirtualKey.Down:
                 _state.MoveActive(1);
                 break;
-            case VirtualKey.Add:
-            case OemPlus when shift:
-                _state.AddRow();
-                break;
-            case VirtualKey.Subtract:
-            case OemMinus:
-                _state.RemoveLastRow();
-                break;
             case VirtualKey.N when !ctrl:
                 _state.SetNow();
                 break;
@@ -207,6 +209,25 @@ public sealed partial class MainWindow : Window
                 break;
             default:
                 e.Handled = false;
+                break;
+        }
+    }
+
+    // 加減列依輸入的字元判斷，不看實體鍵：德文鍵盤的 + 不用 Shift、US 鍵盤的 Shift+- 是 "_"；
+    // 數字鍵區的 + 和 - 也會送出同樣的字元。焦點在文字框時（時區搜尋）要讓字元正常輸入
+    private void Host_CharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs e)
+    {
+        if (FocusManager.GetFocusedElement(Host.XamlRoot) is TextBox)
+            return;
+        switch (e.Character)
+        {
+            case '+':
+                _state.AddRow();
+                e.Handled = true;
+                break;
+            case '-':
+                _state.RemoveLastRow();
+                e.Handled = true;
                 break;
         }
     }
@@ -225,10 +246,6 @@ public sealed partial class MainWindow : Window
     private void AddRow_Click(object sender, RoutedEventArgs e) => _state.AddRow();
 
     private void RemoveRow_Click(object sender, RoutedEventArgs e) => _state.RemoveLastRow();
-
-    // 主鍵盤上的 =/+ 與 -/_ 鍵
-    private const VirtualKey OemPlus = (VirtualKey)0xBB;
-    private const VirtualKey OemMinus = (VirtualKey)0xBD;
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);

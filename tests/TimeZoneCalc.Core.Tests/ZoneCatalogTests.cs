@@ -24,7 +24,8 @@ public class ZoneCatalogTests
     {
         var rest = Catalog.All.Skip(2).ToList();
         Assert.All(rest, z => Assert.False(z.IsFixed));
-        var offsets = rest.Select(z => z.City!.BaseUtcOffset).ToList();
+        var year = DateTime.UtcNow.Year;
+        var offsets = rest.Select(z => ZoneCatalog.LabelOffset(z.City!, year)).ToList();
         Assert.Equal(offsets.Order().ToList(), offsets);
     }
 
@@ -134,5 +135,37 @@ public class ZoneCatalogTests
 
     [Fact]
     public void Filter_matches_offset_text() =>
-        Assert.Contains(Catalog.Filter("+05:45"), z => z.City?.BaseUtcOffset == new TimeSpan(5, 45, 0));
+        Assert.Contains(Catalog.Filter("+05:45"), z => z.City is not null && ZoneCatalog.LabelOffset(z.City, DateTime.UtcNow.Year) == new TimeSpan(5, 45, 0));
+
+    // 模擬 Windows 的「全年夏令」時區：基準 -08:00，但整年都是夏令 +1h，實際全年 -07:00
+    private static TimeZoneInfo AllYearDaylightZone()
+    {
+        var rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
+            new DateTime(2000, 1, 1), new DateTime(2099, 12, 31), TimeSpan.FromHours(1),
+            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 0, 0, 0), 1, 1),
+            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 23, 59, 59, 999), 12, 31));
+        return TimeZoneInfo.CreateCustomTimeZone("Fake All-Year DST", TimeSpan.FromHours(-8), "Fake", "Fake Std", "Fake Dst", [rule]);
+    }
+
+    [Fact]
+    public void All_year_daylight_zone_is_labelled_and_sorted_by_effective_offset()
+    {
+        var fake = AllYearDaylightZone();
+        Assert.Equal(TimeSpan.FromHours(-7), ZoneCatalog.LabelOffset(fake, 2026));
+
+        var mountain = TimeZoneInfo.FindSystemTimeZoneById("Mountain Standard Time");
+        var catalog = new ZoneCatalog([fake, mountain], 2026);
+        var option = catalog.All.Single(z => z.Id == fake.Id);
+        Assert.EndsWith(" (UTC-07:00)", option.DisplayName);
+        Assert.Contains(option, catalog.Filter("-07:00"));
+        Assert.DoesNotContain(option, catalog.Filter("-08:00"));
+    }
+
+    [Fact]
+    public void Ordinary_dst_zone_keeps_standard_offset()
+    {
+        var newYork = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        Assert.Equal(TimeSpan.FromHours(-5), ZoneCatalog.LabelOffset(newYork, 2026));
+        Assert.Equal(TimeSpan.FromHours(8), ZoneCatalog.LabelOffset(TimeZoneInfo.FindSystemTimeZoneById("Taipei Standard Time"), 2026));
+    }
 }

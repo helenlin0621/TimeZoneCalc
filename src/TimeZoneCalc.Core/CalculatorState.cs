@@ -46,6 +46,7 @@ public sealed class CalculatorState
     public Field ActiveField => Entry.Active;
     public AmbiguityChoice Ambiguity { get; private set; }
     public InputStatus Status { get; private set; }
+    public string StatusMessage { get; private set; } = "";
 
     public void PushDigit(int digit)
     {
@@ -168,6 +169,7 @@ public sealed class CalculatorState
         if (Entry.Wall is not { } wall)
         {
             Status = InputStatus.IncompleteDate;
+            StatusMessage = "";
             ShowLastInstantAsStale();
             ActiveRow.Text = Entry.Display;
             ActiveRow.OffsetLabel = "";
@@ -181,6 +183,7 @@ public sealed class CalculatorState
         if (result.Kind == ResolveKind.Invalid)
         {
             Status = InputStatus.NonexistentTime;
+            StatusMessage = StatusText.Nonexistent(ActiveRow.Zone, wall);
             foreach (var row in _rows)
             {
                 row.Text = Blank;
@@ -194,6 +197,7 @@ public sealed class CalculatorState
         }
 
         Status = result.Kind == ResolveKind.Ambiguous ? InputStatus.AmbiguousTime : InputStatus.Ok;
+        StatusMessage = Status == InputStatus.AmbiguousTime ? StatusText.Ambiguous(ActiveRow.Zone, wall, Ambiguity) : "";
         _lastInstant = result.Instant;
         foreach (var row in _rows)
             Show(row, result.Instant, stale: false);
