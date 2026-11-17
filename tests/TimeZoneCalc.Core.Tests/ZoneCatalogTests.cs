@@ -87,6 +87,23 @@ public class ZoneCatalogTests
         Assert.Same(Catalog.Taipei, Catalog.Match("tai"));
 
     [Theory]
+    [InlineData("UK", "GMT Standard Time")]      // 不是 Yukon（Id 裡有 uk、偏移量又排在前面）
+    [InlineData("IN", "India Standard Time")]    // 不是 Dateline
+    [InlineData("london", "GMT Standard Time")]
+    [InlineData("東京", "Tokyo Standard Time")]
+    [InlineData("japan", "Tokyo Standard Time")]
+    public void Match_prefers_whole_word_over_substring(string query, string zoneId) =>
+        Assert.Equal(zoneId, Catalog.Match(query)?.Id);
+
+    [Fact]
+    public void Filter_still_lists_substring_matches_after_better_ones()
+    {
+        var ids = Catalog.Filter("uk").Select(z => z.Id).ToList();
+        Assert.Contains("Yukon Standard Time", ids);
+        Assert.True(ids.IndexOf("GMT Standard Time") < ids.IndexOf("Yukon Standard Time"));
+    }
+
+    [Theory]
     [InlineData("日本", "Tokyo Standard Time")]
     [InlineData("japan", "Tokyo Standard Time")]
     [InlineData("美國", "Eastern Standard Time")]

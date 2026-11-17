@@ -71,13 +71,40 @@ public sealed class ZoneCatalog
         query = query.Trim();
         if (query.Length == 0)
             return All;
-        return All.Where(z => z.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
-                           || z.Id.Contains(query, StringComparison.OrdinalIgnoreCase)
-                           || Matches(Aliases, z.Id, query)
-                           || Matches(CountryData.Keywords, z.Id, query)).ToList();
+        // 按 Enter 會選清單第一筆，所以符合得越完整的要排越前面。只做子字串比對、照偏移量排的話，
+        // 打 "UK" 會先選到 Yukon（Id 裡有 uk），打 "IN" 會選到 Dateline。
+        // OrderBy 是穩定排序：同一級的維持選單原本的順序（UTC、台北、其餘依偏移量）。
+        return All.Select(z => (Zone: z, Rank: Rank(z, query)))
+                  .Where(x => x.Rank < NoMatch)
+                  .OrderBy(x => x.Rank)
+                  .Select(x => x.Zone)
+                  .ToList();
     }
 
-    // 用城市別名或國名（繁中、英文、ISO 代碼）比對
-    private static bool Matches(IReadOnlyDictionary<string, string> keywords, string zoneId, string query) =>
-        keywords.TryGetValue(zoneId, out var words) && words.Contains(query, StringComparison.OrdinalIgnoreCase);
+    private const int NoMatch = 3;
+
+    // 名稱、Id、城市別名、國名（繁中、英文、ISO 代碼）裡最好的一個
+    private static int Rank(ZoneOption zone, string query)
+    {
+        var rank = Math.Min(RankIn(zone.DisplayName, query), RankIn(zone.Id, query));
+        if (Aliases.TryGetValue(zone.Id, out var cities)) rank = Math.Min(rank, RankIn(cities, query));
+        if (CountryData.Keywords.TryGetValue(zone.Id, out var countries)) rank = Math.Min(rank, RankIn(countries, query));
+        return rank;
+    }
+
+    // 0 = 整個詞相同，1 = 從詞的開頭符合，2 = 只是出現在詞的中間
+    private static int RankIn(string text, string query)
+    {
+        var best = NoMatch;
+        for (var at = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+             at >= 0 && best > 0;
+             at = text.IndexOf(query, at + 1, StringComparison.OrdinalIgnoreCase))
+        {
+            var end = at + query.Length;
+            var startsWord = at == 0 || !char.IsLetterOrDigit(text[at - 1]);
+            var endsWord = end == text.Length || !char.IsLetterOrDigit(text[end]);
+            best = Math.Min(best, startsWord ? (endsWord ? 0 : 1) : 2);
+        }
+        return best;
+    }
 }
